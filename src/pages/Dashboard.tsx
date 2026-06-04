@@ -1,6 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 const API = "http://localhost:8000";
+const WS = "ws://localhost:8000";
 
 interface Account {
   id: number;
@@ -13,6 +14,17 @@ interface Account {
   day_pnl: number;
   open_pnl: number;
   ratio: number;
+}
+
+interface Position {
+  id: number;
+  account_id: number;
+  symbol: string;
+  side: string;
+  qty: number;
+  avg_price: number;
+  open_pnl: number;
+  day_pnl: number;
 }
 
 const s = {
@@ -44,6 +56,7 @@ const s = {
   modalBox: {background:"white",borderRadius:"12px",padding:"28px",width:"400px",boxShadow:"0 20px 40px rgba(0,0,0,0.15)"},
   input: {width:"100%",padding:"8px 12px",fontSize:"13px",borderRadius:"8px",border:"1px solid #e5e7eb",outline:"none",boxSizing:"border-box" as const,marginTop:"4px"},
   label: {fontSize:"12px",color:"#6b7280",display:"block",marginBottom:"2px"},
+  sectionTitle: {fontSize:"12px",fontWeight:500,color:"#6b7280",padding:"8px 12px",background:"#f9fafb",borderBottom:"1px solid #f3f4f6"},
 };
 
 const NAV = [{icon:"home",label:"Home"},{icon:"plug",label:"Connections"},{icon:"calendar",label:"Calendar"}];
@@ -73,12 +86,14 @@ function Icon({name}: {name:string}) {
   );
 }
 
-export default function Dashboard({ token }: { token: string }) {
+export default function Dashboard({ token, userId }: { token: string; userId: number }) {
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [positions, setPositions] = useState<Position[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({label:"",broker:"tradelocker",account_id:"PINEX",api_key:"",api_secret:""});
   const [saving, setSaving] = useState(false);
+  const wsRef = useRef<WebSocket | null>(null);
 
   const headers = { Authorization: `Bearer ${token}` };
 
@@ -92,9 +107,25 @@ export default function Dashboard({ token }: { token: string }) {
 
   useEffect(() => {
     fetchAccounts();
-    const t = setInterval(fetchAccounts, 3000);
-    return () => clearInterval(t);
+    startCopyEngine();
+    connectWebSocket();
+    return () => { wsRef.current?.close(); };
   }, []);
+
+  const startCopyEngine = async () => {
+    await fetch(`${API}/api/copy/start`, { method: "POST", headers });
+  };
+
+  const connectWebSocket = () => {
+    const ws = new WebSocket(`${WS}/api/copy/ws/${userId}`);
+    ws.onmessage = (e) => {
+      const data = JSON.parse(e.data);
+      setAccounts(data.accounts);
+      setPositions(data.positions);
+    };
+    ws.onclose = () => setTimeout(connectWebSocket, 3000);
+    wsRef.current = ws;
+  };
 
   const toggle = async (id: number) => {
     await fetch(`${API}/api/accounts/${id}/toggle`, { method: "PATCH", headers });
@@ -109,6 +140,20 @@ export default function Dashboard({ token }: { token: string }) {
   const deleteAccount = async (id: number) => {
     await fetch(`${API}/api/accounts/${id}`, { method: "DELETE", headers });
     fetchAccounts();
+  };
+
+  const flattenAccount = async (accountId: number) => {
+    const acc = accounts.find(a => a.id === accountId);
+    if (!acc) return;
+    if (!window.confirm(`Alle Positionen von "${acc.label}" schliessen?`)) return;
+    
+    await fetch(`${API}/api/copy/flatten-all`, { method: "POST", headers });
+    fetchAccounts();
+  };
+
+  const flattenAll = async () => {
+    if (!window.confirm("Alle Positionen aller Accounts schliessen?")) return;
+    await fetch(`${API}/api/copy/flatten-all`, { method: "POST", headers });
   };
 
   const addAccount = async () => {
@@ -127,7 +172,9 @@ export default function Dashboard({ token }: { token: string }) {
 
   const totalBalance = accounts.reduce((s, a) => s + a.balance, 0);
   const totalDayPnl = accounts.reduce((s, a) => s + a.day_pnl, 0);
-  const totalOpenPnl = accounts.reduce((s, a) => s + a.open_pnl, 0);
+  const totalOpenPnl = positions.reduce((s, p) => s + p.open_pnl, 0);
+
+  const getAccountLabel = (id: number) => accounts.find(a => a.id === id)?.label || `#${id}`;
 
   return (
     <div style={s.app}>
@@ -139,12 +186,8 @@ export default function Dashboard({ token }: { token: string }) {
               <div onClick={() => setShowModal(false)} style={{cursor:"pointer",color:"#9ca3af"}}><Icon name="x"/></div>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
-              <div>
-                <label style={s.label}>Label</label>
-                <input style={s.input} value={form.label} onChange={e => setForm({...form,label:e.target.value})} placeholder="" />
-              </div>
-              <div>
-                <label style={s.label}>Plattform</label>
+              <div><label style={s.label}>Label</label><input style={s.input} value={form.label} onChange={e => setForm({...form,label:e.target.value})} placeholder="" /></div>
+              <div><label style={s.label}>Plattform</label>
                 <select style={s.input} value={form.broker} onChange={e => setForm({...form,broker:e.target.value})}>
                   <option value="tradelocker">TradeLocker</option>
                   <option value="paper">Paper Trading</option>
@@ -152,20 +195,10 @@ export default function Dashboard({ token }: { token: string }) {
                   <option value="mt5">MT5</option>
                 </select>
               </div>
-              <div>
-                <label style={s.label}>Server</label>
-                <input style={s.input} value={form.account_id} onChange={e => setForm({...form,account_id:e.target.value})} placeholder="" />
-              </div>
-              <div>
-                <label style={s.label}>Email</label>
-                <input type="email" style={s.input} value={form.api_key} onChange={e => setForm({...form,api_key:e.target.value})} placeholder="" />
-              </div>
-              <div>
-                <label style={s.label}>Passwort</label>
-                <input type="password" style={s.input} value={form.api_secret} onChange={e => setForm({...form,api_secret:e.target.value})} placeholder="" />
-              </div>
-              <button onClick={addAccount} disabled={saving}
-                style={{...s.btnBlue,padding:"8px",borderRadius:"8px",fontSize:"13px",fontWeight:500,marginTop:"4px",opacity:saving?0.6:1}}>
+              <div><label style={s.label}>Server</label><input style={s.input} value={form.account_id} onChange={e => setForm({...form,account_id:e.target.value})} placeholder="" /></div>
+              <div><label style={s.label}>Email</label><input type="email" style={s.input} value={form.api_key} onChange={e => setForm({...form,api_key:e.target.value})} placeholder="" /></div>
+              <div><label style={s.label}>Passwort</label><input type="password" style={s.input} value={form.api_secret} onChange={e => setForm({...form,api_secret:e.target.value})} placeholder="" /></div>
+              <button onClick={addAccount} disabled={saving} style={{...s.btnBlue,padding:"8px",borderRadius:"8px",fontSize:"13px",fontWeight:500,marginTop:"4px",opacity:saving?0.6:1}}>
                 {saving ? "Speichern..." : "Account hinzufuegen"}
               </button>
             </div>
@@ -179,17 +212,11 @@ export default function Dashboard({ token }: { token: string }) {
           <span style={{fontWeight:500,color:"#1f2937"}}>CopyTrader</span>
         </div>
         <div style={s.nav}>
-          {NAV.map(({icon,label}) => (
-            <div key={label} style={s.navItem}><Icon name={icon}/> {label}</div>
-          ))}
+          {NAV.map(({icon,label}) => (<div key={label} style={s.navItem}><Icon name={icon}/> {label}</div>))}
           <div style={s.navSection}>Copy Trading</div>
-          {NAV2.map(({icon,label,active}) => (
-            <div key={label} style={active ? s.navItemActive : s.navItem}><Icon name={icon}/> {label}</div>
-          ))}
+          {NAV2.map(({icon,label,active}) => (<div key={label} style={active ? s.navItemActive : s.navItem}><Icon name={icon}/> {label}</div>))}
           <div style={s.navSection}>Analytics</div>
-          {NAV3.map(({icon,label}) => (
-            <div key={label} style={s.navItem}><Icon name={icon}/> {label}</div>
-          ))}
+          {NAV3.map(({icon,label}) => (<div key={label} style={s.navItem}><Icon name={icon}/> {label}</div>))}
         </div>
         <div style={{padding:"8px 6px",borderTop:"1px solid #f3f4f6"}}>
           <div style={s.navItem}><Icon name="settings"/> Settings</div>
@@ -201,17 +228,13 @@ export default function Dashboard({ token }: { token: string }) {
         <div style={s.topbar}>
           <div style={{display:"flex",alignItems:"center",gap:"12px"}}>
             <span style={{fontWeight:500,color:"#1f2937"}}>Cockpit</span>
-            <div style={s.pill}>
-              <span style={s.dot}></span>
-              {accounts.filter(a => a.is_active).length} Accounts aktiv
-            </div>
+            <div style={s.pill}><span style={s.dot}></span>{positions.length} Positionen offen</div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
             <button onClick={() => setShowModal(true)} style={s.btnBlue}><Icon name="plus"/> Account</button>
             <button style={s.btnGray}>Change leader</button>
             <button style={s.btnGray}>Disable all</button>
-            <button style={s.btnRed}>x Cancel orders</button>
-            <button style={{...s.btnBlue,background:"#0f172a",borderColor:"#0f172a"}}>Flatten all</button>
+            <button onClick={flattenAll} style={s.btnRed}>Flatten all</button>
           </div>
         </div>
 
@@ -236,60 +259,99 @@ export default function Dashboard({ token }: { token: string }) {
         <div style={{flex:1,overflow:"auto"}}>
           {loading ? (
             <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"128px",color:"#9ca3af"}}>Laden...</div>
-          ) : accounts.length === 0 ? (
-            <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"200px",color:"#9ca3af",gap:"12px"}}>
-              <span>Noch keine Accounts</span>
-              <button onClick={() => setShowModal(true)} style={s.btnBlue}>Account hinzufuegen</button>
-            </div>
           ) : (
-            <table style={s.table}>
-              <thead>
-                <tr>
-                  <th style={s.th}></th>
-                  <th style={s.th}>Follow</th>
-                  <th style={s.th}>ID</th>
-                  <th style={s.th}>Plattform</th>
-                  <th style={s.th}>Account</th>
-                  <th style={s.th}>Balance</th>
-                  <th style={s.th}>Day PnL</th>
-                  <th style={s.th}>Open PnL</th>
-                  <th style={s.th}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {accounts.map((a) => (
-                  <tr key={a.id}>
-                    <td style={s.td}>
-                      {a.is_leader && (
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="#f59e0b" stroke="#f59e0b" strokeWidth="1.5">
-                          <path d="M5 16L3 5l5.5 5L12 2l3.5 8L21 5l-2 11H5zm0 0h14" strokeLinecap="round" strokeLinejoin="round"/>
-                        </svg>
-                      )}
-                    </td>
-                    <td style={s.td}>
-                      {a.is_leader ? (
-                        <span style={{color:"#f59e0b",fontSize:"11px",fontWeight:500}}>Leader</span>
-                      ) : (
-                        <div onClick={() => toggle(a.id)} style={{width:"32px",height:"16px",borderRadius:"8px",background:a.is_active?"#0ea5e9":"#d1d5db",cursor:"pointer",position:"relative"}}>
-                          <div style={{position:"absolute",top:"2px",width:"12px",height:"12px",borderRadius:"50%",background:"white",transition:"transform 0.2s",transform:a.is_active?"translateX(18px)":"translateX(2px)"}}></div>
-                        </div>
-                      )}
-                    </td>
-                    <td style={{...s.td,color:"#9ca3af",fontFamily:"monospace"}}>#{a.id}</td>
-                    <td style={s.td}><span style={s.badge}>{a.broker}</span></td>
-                    <td style={{...s.td,color:"#6b7280"}}>{a.label}</td>
-                    <td style={s.td}>${a.balance.toFixed(2)}</td>
-                    <td style={{...s.td,color:a.day_pnl>=0?"#16a34a":"#ef4444"}}>{a.day_pnl>=0?"+":""} ${a.day_pnl.toFixed(2)}</td>
-                    <td style={{...s.td,color:a.open_pnl>=0?"#16a34a":"#ef4444"}}>{a.open_pnl>=0?"+":""} ${a.open_pnl.toFixed(2)}</td>
-                    <td style={{...s.td,display:"flex",gap:"4px"}}>
-                      <button onClick={() => setLeader(a.id)} style={{...s.btnSmall,color:"#d97706",borderColor:"#fde68a"}}>Leader</button>
-                      <button style={{...s.btnSmall,color:"#dc2626",borderColor:"#fecaca"}}>Flatten</button>
-                      <button onClick={() => deleteAccount(a.id)} style={{...s.btnSmall,color:"#9ca3af"}}>x</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <>
+              {/* Accounts Tabelle */}
+              <div style={s.sectionTitle}>Accounts</div>
+              {accounts.length === 0 ? (
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100px",color:"#9ca3af",gap:"12px"}}>
+                  <span>Noch keine Accounts</span>
+                  <button onClick={() => setShowModal(true)} style={s.btnBlue}>Account hinzufuegen</button>
+                </div>
+              ) : (
+                <table style={s.table}>
+                  <thead>
+                    <tr>
+                      <th style={s.th}></th>
+                      <th style={s.th}>Follow</th>
+                      <th style={s.th}>ID</th>
+                      <th style={s.th}>Plattform</th>
+                      <th style={s.th}>Account</th>
+                      <th style={s.th}>Balance</th>
+                      <th style={s.th}>Day PnL</th>
+                      <th style={s.th}>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {accounts.map((a) => (
+                      <tr key={a.id}>
+                        <td style={s.td}>
+                          {a.is_leader && (
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="#f59e0b" stroke="#f59e0b" strokeWidth="1.5">
+                              <path d="M5 16L3 5l5.5 5L12 2l3.5 8L21 5l-2 11H5zm0 0h14" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          )}
+                        </td>
+                        <td style={s.td}>
+                          {a.is_leader ? (
+                            <span style={{color:"#f59e0b",fontSize:"11px",fontWeight:500}}>Leader</span>
+                          ) : (
+                            <div onClick={() => toggle(a.id)} style={{width:"32px",height:"16px",borderRadius:"8px",background:a.is_active?"#0ea5e9":"#d1d5db",cursor:"pointer",position:"relative"}}>
+                              <div style={{position:"absolute",top:"2px",width:"12px",height:"12px",borderRadius:"50%",background:"white",transition:"transform 0.2s",transform:a.is_active?"translateX(18px)":"translateX(2px)"}}></div>
+                            </div>
+                          )}
+                        </td>
+                        <td style={{...s.td,color:"#9ca3af",fontFamily:"monospace"}}>#{a.id}</td>
+                        <td style={s.td}><span style={s.badge}>{a.broker}</span></td>
+                        <td style={{...s.td,color:"#6b7280"}}>{a.label}</td>
+                        <td style={s.td}>${a.balance.toFixed(2)}</td>
+                        <td style={{...s.td,color:a.day_pnl>=0?"#16a34a":"#ef4444"}}>{a.day_pnl>=0?"+":""} ${a.day_pnl.toFixed(2)}</td>
+                        <td style={{...s.td,display:"flex",gap:"4px"}}>
+                          <button onClick={() => setLeader(a.id)} style={{...s.btnSmall,color:"#d97706",borderColor:"#fde68a"}}>Leader</button>
+                          <button onClick={() => flattenAccount(a.id)} style={{...s.btnSmall,color:"#dc2626",borderColor:"#fecaca"}}>Flatten</button>
+                          <button onClick={() => deleteAccount(a.id)} style={{...s.btnSmall,color:"#9ca3af"}}>x</button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+
+              {/* Positionen Tabelle */}
+              {positions.length > 0 && (
+                <>
+                  <div style={{...s.sectionTitle,marginTop:"0px"}}>Offene Positionen</div>
+                  <table style={s.table}>
+                    <thead>
+                      <tr>
+                        <th style={s.th}>Account</th>
+                        <th style={s.th}>Symbol</th>
+                        <th style={s.th}>Side</th>
+                        <th style={s.th}>Qty</th>
+                        <th style={s.th}>Avg. Price</th>
+                        <th style={s.th}>Open PnL</th>
+                        <th style={s.th}>Day PnL</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {positions.map((p) => (
+                        <tr key={p.id}>
+                          <td style={{...s.td,color:"#6b7280"}}>{getAccountLabel(p.account_id)}</td>
+                          <td style={{...s.td,fontWeight:500}}>{p.symbol}</td>
+                          <td style={{...s.td,color:p.side==="long"?"#16a34a":"#ef4444"}}>
+                            {p.side === "long" ? "Long" : "Short"}
+                          </td>
+                          <td style={s.td}>{p.qty}</td>
+                          <td style={s.td}>{p.avg_price > 0 ? p.avg_price.toFixed(2) : "-"}</td>
+                          <td style={{...s.td,color:p.open_pnl>=0?"#16a34a":"#ef4444"}}>{p.open_pnl>=0?"+":""} ${p.open_pnl.toFixed(2)}</td>
+                          <td style={{...s.td,color:p.day_pnl>=0?"#16a34a":"#ef4444"}}>{p.day_pnl>=0?"+":""} ${p.day_pnl.toFixed(2)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </>
+              )}
+            </>
           )}
         </div>
       </main>
