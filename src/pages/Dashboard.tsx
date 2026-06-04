@@ -42,6 +42,44 @@ const s = {
   btnSmall: {padding:"2px 8px",borderRadius:"4px",border:"1px solid #e5e7eb",fontSize:"11px",color:"#6b7280",cursor:"pointer",background:"transparent"},
 };
 
+const NAV = [
+  {icon:"home",label:"Home"},
+  {icon:"plug",label:"Connections"},
+  {icon:"calendar",label:"Calendar"},
+];
+const NAV2 = [
+  {icon:"chart",label:"Cockpit",active:true},
+  {icon:"users",label:"Groups"},
+  {icon:"shield",label:"Risk Mgmt"},
+];
+const NAV3 = [
+  {icon:"bar",label:"Dashboard"},
+  {icon:"day",label:"Daily"},
+  {icon:"week",label:"Weekly"},
+];
+
+function Icon({name}: {name:string}) {
+  const icons: Record<string,string> = {
+    home: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6",
+    plug: "M13 10V3L4 14h7v7l9-11h-7z",
+    calendar: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
+    chart: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z",
+    users: "M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z",
+    shield: "M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z",
+    bar: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z",
+    day: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z",
+    week: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2",
+    settings: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z",
+    moon: "M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z",
+    crown: "M5 16L3 5l5.5 5L12 2l3.5 8L21 5l-2 11H5zm0 0h14",
+  };
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <path d={icons[name] || icons.home}/>
+    </svg>
+  );
+}
+
 export default function Dashboard({ token }: { token: string }) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,21 +121,21 @@ export default function Dashboard({ token }: { token: string }) {
           <span style={{fontWeight:500,color:"#1f2937"}}>CopyTrader</span>
         </div>
         <div style={s.nav}>
-          {[["??","Home"],["??","Connections"],["??","Calendar"]].map(([icon,label]) => (
-            <div key={label} style={s.navItem}>{icon} {label}</div>
+          {NAV.map(({icon,label}) => (
+            <div key={label} style={s.navItem}><Icon name={icon}/> {label}</div>
           ))}
           <div style={s.navSection}>Copy Trading</div>
-          <div style={s.navItemActive}>?? Cockpit</div>
-          <div style={s.navItem}>?? Groups</div>
-          <div style={s.navItem}>??? Risk Mgmt</div>
+          {NAV2.map(({icon,label,active}) => (
+            <div key={label} style={active ? s.navItemActive : s.navItem}><Icon name={icon}/> {label}</div>
+          ))}
           <div style={s.navSection}>Analytics</div>
-          <div style={s.navItem}>?? Dashboard</div>
-          <div style={s.navItem}>?? Daily</div>
-          <div style={s.navItem}>?? Weekly</div>
+          {NAV3.map(({icon,label}) => (
+            <div key={label} style={s.navItem}><Icon name={icon}/> {label}</div>
+          ))}
         </div>
         <div style={{padding:"8px 6px",borderTop:"1px solid #f3f4f6"}}>
-          <div style={s.navItem}>?? Settings</div>
-          <div style={s.navItem}>?? Dark mode</div>
+          <div style={s.navItem}><Icon name="settings"/> Settings</div>
+          <div style={s.navItem}><Icon name="moon"/> Dark mode</div>
         </div>
       </aside>
 
@@ -113,7 +151,7 @@ export default function Dashboard({ token }: { token: string }) {
           <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
             <button style={s.btnGray}>Change leader</button>
             <button style={s.btnGray}>Disable all followers</button>
-            <button style={s.btnRed}>? Cancel all orders</button>
+            <button style={s.btnRed}>x Cancel all orders</button>
             <button style={s.btnBlue}>Flatten all</button>
           </div>
         </div>
@@ -144,7 +182,7 @@ export default function Dashboard({ token }: { token: string }) {
           {loading ? (
             <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"128px",color:"#9ca3af"}}>Laden...</div>
           ) : accounts.length === 0 ? (
-            <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"128px",color:"#9ca3af"}}>Keine Accounts verknüpft</div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"128px",color:"#9ca3af"}}>Keine Accounts</div>
           ) : (
             <table style={s.table}>
               <thead>
@@ -163,13 +201,19 @@ export default function Dashboard({ token }: { token: string }) {
               </thead>
               <tbody>
                 {accounts.map((a) => (
-                  <tr key={a.id} style={{borderBottom:"1px solid #f9fafb"}}>
-                    <td style={s.td}>{a.is_leader ? "??" : ""}</td>
+                  <tr key={a.id}>
+                    <td style={s.td}>
+                      {a.is_leader && (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="#f59e0b" stroke="#f59e0b" strokeWidth="1.5">
+                          <path d="M5 16L3 5l5.5 5L12 2l3.5 8L21 5l-2 11H5zm0 0h14" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </td>
                     <td style={s.td}>
                       {a.is_leader ? (
-                        <span style={{color:"#f59e0b",fontSize:"11px"}}>Leader</span>
+                        <span style={{color:"#f59e0b",fontSize:"11px",fontWeight:500}}>Leader</span>
                       ) : (
-                        <div onClick={() => toggle(a.id)} style={{width:"32px",height:"16px",borderRadius:"8px",background:a.is_active?"#0ea5e9":"#d1d5db",cursor:"pointer",position:"relative"}}>
+                        <div onClick={() => toggle(a.id)} style={{width:"32px",height:"16px",borderRadius:"8px",background:a.is_active?"#0ea5e9":"#d1d5db",cursor:"pointer",position:"relative",flexShrink:0}}>
                           <div style={{position:"absolute",top:"2px",width:"12px",height:"12px",borderRadius:"50%",background:"white",transition:"transform 0.2s",transform:a.is_active?"translateX(18px)":"translateX(2px)"}}></div>
                         </div>
                       )}
