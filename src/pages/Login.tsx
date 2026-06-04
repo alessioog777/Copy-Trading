@@ -1,63 +1,66 @@
 import { useState } from "react";
 
-export default function Login({ onLogin }: { onLogin: () => void }) {
+const API = "http://localhost:8000";
+
+export default function Login({ onLogin }: { onLogin: (token: string) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-        const handleLogin = () => {
-        setLoading(true);
-        setTimeout(() => { setLoading(false); onLogin(); }, 1500);
-        };
+  const handleLogin = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch(`${API}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `username=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`,
+      });
+      if (!res.ok) { setError("Email oder Passwort falsch"); return; }
+      const data = await res.json();
+      localStorage.setItem("token", data.access_token);
+      onLogin(data.access_token);
+    } catch {
+      setError("Server nicht erreichbar");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
-    <div className="flex h-screen bg-gray-50 items-center justify-center">
-      <div className="w-full max-w-sm">
-
-        {/* Logo */}
-        <div className="flex items-center gap-2 justify-center mb-8">
-          <div className="w-8 h-8 rounded-lg bg-sky-500 flex items-center justify-center text-white text-sm font-medium">CT</div>
-          <span className="text-lg font-medium text-gray-800">CopyTrader</span>
+    <div style={{display:"flex",height:"100vh",background:"#f9fafb",alignItems:"center",justifyContent:"center"}}>
+      <div style={{width:"100%",maxWidth:"360px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:"8px",justifyContent:"center",marginBottom:"32px"}}>
+          <div style={{width:"32px",height:"32px",borderRadius:"8px",background:"#0ea5e9",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:"13px",fontWeight:500}}>CT</div>
+          <span style={{fontSize:"18px",fontWeight:500,color:"#1f2937"}}>CopyTrader</span>
         </div>
-
-        {/* Card */}
-        <div className="bg-white rounded-xl border border-gray-100 p-8">
-          <h1 className="text-base font-medium text-gray-800 mb-1">Welcome back</h1>
-          <p className="text-xs text-gray-400 mb-6">Sign in to your account</p>
-
-          <div className="space-y-4">
+        <div style={{background:"white",borderRadius:"12px",border:"1px solid #f3f4f6",padding:"32px"}}>
+          <h1 style={{fontSize:"16px",fontWeight:500,color:"#1f2937",marginBottom:"4px"}}>Welcome back</h1>
+          <p style={{fontSize:"12px",color:"#9ca3af",marginBottom:"24px"}}>Sign in to your account</p>
+          <div style={{display:"flex",flexDirection:"column",gap:"16px"}}>
             <div>
-              <label className="text-xs text-gray-500 mb-1.5 block">Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
+              <label style={{fontSize:"12px",color:"#6b7280",display:"block",marginBottom:"6px"}}>Email</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 outline-none focus:border-sky-400 transition-colors"
-              />
+                style={{width:"100%",padding:"8px 12px",fontSize:"14px",borderRadius:"8px",border:"1px solid #e5e7eb",outline:"none",boxSizing:"border-box"}} />
             </div>
             <div>
-              <label className="text-xs text-gray-500 mb-1.5 block">Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
-                className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 outline-none focus:border-sky-400 transition-colors"
-              />
+              <label style={{fontSize:"12px",color:"#6b7280",display:"block",marginBottom:"6px"}}>Password</label>
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+                placeholder="••••••••"
+                onKeyDown={e => e.key === "Enter" && handleLogin()}
+                style={{width:"100%",padding:"8px 12px",fontSize:"14px",borderRadius:"8px",border:"1px solid #e5e7eb",outline:"none",boxSizing:"border-box"}} />
             </div>
-            <button
-              onClick={handleLogin}
-              disabled={loading}
-              className="w-full py-2 rounded-lg bg-sky-500 text-white text-sm font-medium hover:bg-sky-600 transition-colors disabled:opacity-60"
-            >
+            {error && <p style={{fontSize:"12px",color:"#ef4444"}}>{error}</p>}
+            <button onClick={handleLogin} disabled={loading}
+              style={{width:"100%",padding:"8px",borderRadius:"8px",background:"#0ea5e9",color:"white",fontSize:"14px",fontWeight:500,border:"none",cursor:"pointer",opacity:loading?0.6:1}}>
               {loading ? "Signing in..." : "Sign in"}
             </button>
           </div>
-
-          <div className="mt-4 text-center">
-            <span className="text-xs text-gray-400">Don't have an account? </span>
-            <span className="text-xs text-sky-500 cursor-pointer hover:underline">Sign up</span>
+          <div style={{marginTop:"16px",textAlign:"center"}}>
+            <span style={{fontSize:"12px",color:"#9ca3af"}}>No account yet? </span>
+            <span style={{fontSize:"12px",color:"#0ea5e9",cursor:"pointer"}}>Sign up</span>
           </div>
         </div>
       </div>

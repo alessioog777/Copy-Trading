@@ -1,10 +1,10 @@
 import { useState } from "react";
-import Dashboard from "./pages/Dashboard";
 import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
 
-function App() {
-  const [loggedIn, setLoggedIn] = useState(false);
-  return loggedIn ? <Dashboard /> : <Login onLogin={() => setLoggedIn(true)} />;
+export default function App() {
+  const [token, setToken] = useState(localStorage.getItem("token") || "");
+
+  if (!token) return <Login onLogin={setToken} />;
+  return <Dashboard token={token} />;
 }
-
-export default App;
