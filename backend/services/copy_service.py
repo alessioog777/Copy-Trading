@@ -1,4 +1,8 @@
 from backend.models.account import Account
+from backend.core.database import AsyncSessionLocal
+from backend.models.position import Position
+from sqlalchemy import select
+from datetime import datetime, timezone
 
 
 class CopyService:
@@ -31,14 +35,65 @@ class CopyService:
                 await self.close_position(pos["id"])
 
 
-class TradeLockerBroker:
-    """
-    TradeLocker Broker via offizielles Python Package.
-    account.api_key    = Email
-    account.api_secret = Passwort
-    account.account_id = Server (z.B. "PINEX")
-    """
+class PaperBroker:
+    """Liest und schreibt Positionen direkt in die DB."""
 
+    def __init__(self, account: Account):
+        self.account = account
+
+    async def get_positions(self) -> list[dict]:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(Position).where(
+                    Position.account_id == self.account.id,
+                    Position.is_open == True,
+                )
+            )
+            positions = result.scalars().all()
+            return [{"id": str(p.id), "symbol": p.symbol, "side": p.side, "qty": p.qty, "avg_price": p.avg_price, "open_pnl": p.open_pnl} for p in positions]
+
+    async def place_order(self, symbol: str, side: str, qty: float) -> dict:
+        async with AsyncSessionLocal() as db:
+            pos = Position(
+                account_id=self.account.id,
+                symbol=symbol,
+                side=side,
+                qty=qty,
+                avg_price=0.0,
+                open_pnl=0.0,
+                day_pnl=0.0,
+                is_open=True,
+            )
+            db.add(pos)
+            await db.commit()
+            await db.refresh(pos)
+            print(f"[Paper] {self.account.label}: OPEN {qty}x {symbol} {side}")
+            return {"id": str(pos.id), "symbol": symbol, "side": side, "qty": qty}
+
+    async def close_position(self, position_id: str) -> bool:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(Position).where(Position.id == int(position_id)))
+            pos = result.scalar_one_or_none()
+            if pos:
+                pos.is_open = False
+                pos.closed_at = datetime.now(timezone.utc)
+                await db.commit()
+            print(f"[Paper] {self.account.label}: CLOSE {position_id}")
+            return True
+
+    async def flatten_all(self) -> bool:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(Position).where(Position.account_id == self.account.id, Position.is_open == True))
+            positions = result.scalars().all()
+            for pos in positions:
+                pos.is_open = False
+                pos.closed_at = datetime.now(timezone.utc)
+            await db.commit()
+            print(f"[Paper] {self.account.label}: FLATTEN ALL")
+            return True
+
+
+class TradeLockerBroker:
     def __init__(self, account: Account):
         self.account = account
         self._tl = None
@@ -57,59 +112,23 @@ class TradeLockerBroker:
     async def get_positions(self) -> list[dict]:
         tl = await self._get_client()
         positions = tl.get_all_positions()
-        result = []
-        for pos in positions.itertuples():
-            result.append({
-                "id": str(pos.id),
-                "symbol": pos.tradableInstrumentId,
-                "side": "long" if pos.side == "buy" else "short",
-                "qty": float(pos.qty),
-                "avg_price": float(pos.avgPrice),
-                "open_pnl": float(pos.unrealizedPl) if hasattr(pos, "unrealizedPl") else 0.0,
-            })
-        return result
+        return [{"id": str(pos.id), "symbol": pos.tradableInstrumentId, "side": "long" if pos.side == "buy" else "short", "qty": float(pos.qty), "avg_price": float(pos.avgPrice), "open_pnl": float(pos.unrealizedPl) if hasattr(pos, "unrealizedPl") else 0.0} for pos in positions.itertuples()]
 
-    async def place_order(self, symbol: str, side: str, qty: float) -> dict:
+    async def place_order(self, symbol, side, qty):
         tl = await self._get_client()
-        order_side = "buy" if side == "long" else "sell"
-        order_id = tl.create_order(
-            symbol=symbol,
-            quantity=qty,
-            side=order_side,
-            type_="market",
-        )
+        order_id = tl.create_order(symbol=symbol, quantity=qty, side="buy" if side == "long" else "sell", type_="market")
         return {"id": str(order_id), "symbol": symbol, "side": side, "qty": qty}
 
-    async def close_position(self, position_id: str) -> bool:
+    async def close_position(self, position_id):
         tl = await self._get_client()
         tl.close_position(position_id=int(position_id))
         return True
 
-    async def flatten_all(self) -> bool:
+    async def flatten_all(self):
         tl = await self._get_client()
         positions = tl.get_all_positions()
         for pos in positions.itertuples():
             tl.close_position(position_id=pos.id)
-        return True
-
-
-class PaperBroker:
-    _positions: dict = {}
-    def __init__(self, account):
-        self.account = account
-        if str(account.id) not in self._positions:
-            self._positions[str(account.id)] = []
-    def _key(self): return str(self.account.id)
-    async def get_positions(self): return self._positions[self._key()]
-    async def place_order(self, symbol, side, qty):
-        pos = {"id": f"paper-{symbol}-{side}", "symbol": symbol, "side": side, "qty": qty}
-        self._positions[self._key()].append(pos)
-        return pos
-    async def close_position(self, pid):
-        self._positions[self._key()] = [p for p in self._positions[self._key()] if p["id"] != pid]
-        return True
-    async def flatten_all(self):
-        self._positions[self._key()] = []
         return True
 
 
