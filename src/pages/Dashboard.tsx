@@ -40,23 +40,15 @@ const s = {
   td: {padding:"8px 12px",borderBottom:"1px solid #f9fafb"},
   badge: {padding:"2px 8px",borderRadius:"4px",background:"#f3f4f6",color:"#4b5563",fontSize:"11px"},
   btnSmall: {padding:"2px 8px",borderRadius:"4px",border:"1px solid #e5e7eb",fontSize:"11px",color:"#6b7280",cursor:"pointer",background:"transparent"},
+  modal: {position:"fixed" as const,inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100},
+  modalBox: {background:"white",borderRadius:"12px",padding:"28px",width:"400px",boxShadow:"0 20px 40px rgba(0,0,0,0.15)"},
+  input: {width:"100%",padding:"8px 12px",fontSize:"13px",borderRadius:"8px",border:"1px solid #e5e7eb",outline:"none",boxSizing:"border-box" as const,marginTop:"4px"},
+  label: {fontSize:"12px",color:"#6b7280",display:"block",marginBottom:"2px"},
 };
 
-const NAV = [
-  {icon:"home",label:"Home"},
-  {icon:"plug",label:"Connections"},
-  {icon:"calendar",label:"Calendar"},
-];
-const NAV2 = [
-  {icon:"chart",label:"Cockpit",active:true},
-  {icon:"users",label:"Groups"},
-  {icon:"shield",label:"Risk Mgmt"},
-];
-const NAV3 = [
-  {icon:"bar",label:"Dashboard"},
-  {icon:"day",label:"Daily"},
-  {icon:"week",label:"Weekly"},
-];
+const NAV = [{icon:"home",label:"Home"},{icon:"plug",label:"Connections"},{icon:"calendar",label:"Calendar"}];
+const NAV2 = [{icon:"chart",label:"Cockpit",active:true},{icon:"users",label:"Groups"},{icon:"shield",label:"Risk Mgmt"}];
+const NAV3 = [{icon:"bar",label:"Dashboard"},{icon:"day",label:"Daily"},{icon:"week",label:"Weekly"}];
 
 function Icon({name}: {name:string}) {
   const icons: Record<string,string> = {
@@ -71,7 +63,8 @@ function Icon({name}: {name:string}) {
     week: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2",
     settings: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z",
     moon: "M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z",
-    crown: "M5 16L3 5l5.5 5L12 2l3.5 8L21 5l-2 11H5zm0 0h14",
+    plus: "M12 4v16m8-8H4",
+    x: "M6 18L18 6M6 6l12 12",
   };
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -83,6 +76,10 @@ function Icon({name}: {name:string}) {
 export default function Dashboard({ token }: { token: string }) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [form, setForm] = useState({label:"",broker:"tradelocker",account_id:"PINEX",api_key:"",api_secret:""});
+  const [saving, setSaving] = useState(false);
+
   const headers = { Authorization: `Bearer ${token}` };
 
   const fetchAccounts = async () => {
@@ -109,12 +106,73 @@ export default function Dashboard({ token }: { token: string }) {
     fetchAccounts();
   };
 
+  const deleteAccount = async (id: number) => {
+    await fetch(`${API}/api/accounts/${id}`, { method: "DELETE", headers });
+    fetchAccounts();
+  };
+
+  const addAccount = async () => {
+    setSaving(true);
+    try {
+      await fetch(`${API}/api/accounts/`, {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ ...form, ratio: 1.0 }),
+      });
+      setShowModal(false);
+      setForm({label:"",broker:"tradelocker",account_id:"PINEX",api_key:"",api_secret:""});
+      fetchAccounts();
+    } finally { setSaving(false); }
+  };
+
   const totalBalance = accounts.reduce((s, a) => s + a.balance, 0);
   const totalDayPnl = accounts.reduce((s, a) => s + a.day_pnl, 0);
   const totalOpenPnl = accounts.reduce((s, a) => s + a.open_pnl, 0);
 
   return (
     <div style={s.app}>
+      {showModal && (
+        <div style={s.modal}>
+          <div style={s.modalBox}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"20px"}}>
+              <span style={{fontSize:"15px",fontWeight:500,color:"#1f2937"}}>Account hinzufuegen</span>
+              <div onClick={() => setShowModal(false)} style={{cursor:"pointer",color:"#9ca3af"}}><Icon name="x"/></div>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
+              <div>
+                <label style={s.label}>Label</label>
+                <input style={s.input} value={form.label} onChange={e => setForm({...form,label:e.target.value})} placeholder="" />
+              </div>
+              <div>
+                <label style={s.label}>Plattform</label>
+                <select style={s.input} value={form.broker} onChange={e => setForm({...form,broker:e.target.value})}>
+                  <option value="tradelocker">TradeLocker</option>
+                  <option value="paper">Paper Trading</option>
+                  <option value="mt4">MT4</option>
+                  <option value="mt5">MT5</option>
+                </select>
+              </div>
+              <div>
+                <label style={s.label}>Server</label>
+                <input style={s.input} value={form.account_id} onChange={e => setForm({...form,account_id:e.target.value})} placeholder="" />
+              </div>
+              <div>
+                <label style={s.label}>Email</label>
+                <input type="email" style={s.input} value={form.api_key} onChange={e => setForm({...form,api_key:e.target.value})} placeholder="" />
+              </div>
+              <div>
+                <label style={s.label}>Passwort</label>
+                <input type="password" style={s.input} value={form.api_secret} onChange={e => setForm({...form,api_secret:e.target.value})} placeholder="" />
+              </div>
+              <button onClick={addAccount} disabled={saving}
+                style={{...s.btnBlue,padding:"8px",borderRadius:"8px",fontSize:"13px",fontWeight:500,marginTop:"4px",opacity:saving?0.6:1}}>
+                {saving ? "Speichern..." : "Account hinzufuegen"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <aside style={s.sidebar}>
         <div style={s.logo}>
           <div style={s.logoMark}>CT</div>
@@ -149,25 +207,22 @@ export default function Dashboard({ token }: { token: string }) {
             </div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+            <button onClick={() => setShowModal(true)} style={s.btnBlue}><Icon name="plus"/> Account</button>
             <button style={s.btnGray}>Change leader</button>
-            <button style={s.btnGray}>Disable all followers</button>
-            <button style={s.btnRed}>x Cancel all orders</button>
-            <button style={s.btnBlue}>Flatten all</button>
+            <button style={s.btnGray}>Disable all</button>
+            <button style={s.btnRed}>x Cancel orders</button>
+            <button style={{...s.btnBlue,background:"#0f172a",borderColor:"#0f172a"}}>Flatten all</button>
           </div>
         </div>
 
         <div style={s.stats}>
           <div style={s.stat}>
             <div style={s.statLabel}>Total day PnL</div>
-            <div style={{...s.statVal,color:totalDayPnl>=0?"#16a34a":"#ef4444"}}>
-              {totalDayPnl>=0?"+":""} ${totalDayPnl.toFixed(2)}
-            </div>
+            <div style={{...s.statVal,color:totalDayPnl>=0?"#16a34a":"#ef4444"}}>{totalDayPnl>=0?"+":""} ${totalDayPnl.toFixed(2)}</div>
           </div>
           <div style={s.stat}>
             <div style={s.statLabel}>Total open PnL</div>
-            <div style={{...s.statVal,color:totalOpenPnl>=0?"#16a34a":"#ef4444"}}>
-              {totalOpenPnl>=0?"+":""} ${totalOpenPnl.toFixed(2)}
-            </div>
+            <div style={{...s.statVal,color:totalOpenPnl>=0?"#16a34a":"#ef4444"}}>{totalOpenPnl>=0?"+":""} ${totalOpenPnl.toFixed(2)}</div>
           </div>
           <div style={{...s.stat,borderRight:"none",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div>
@@ -182,7 +237,10 @@ export default function Dashboard({ token }: { token: string }) {
           {loading ? (
             <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"128px",color:"#9ca3af"}}>Laden...</div>
           ) : accounts.length === 0 ? (
-            <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"128px",color:"#9ca3af"}}>Keine Accounts</div>
+            <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"200px",color:"#9ca3af",gap:"12px"}}>
+              <span>Noch keine Accounts</span>
+              <button onClick={() => setShowModal(true)} style={s.btnBlue}>Account hinzufuegen</button>
+            </div>
           ) : (
             <table style={s.table}>
               <thead>
@@ -190,12 +248,11 @@ export default function Dashboard({ token }: { token: string }) {
                   <th style={s.th}></th>
                   <th style={s.th}>Follow</th>
                   <th style={s.th}>ID</th>
-                  <th style={s.th}>Broker</th>
+                  <th style={s.th}>Plattform</th>
                   <th style={s.th}>Account</th>
                   <th style={s.th}>Balance</th>
                   <th style={s.th}>Day PnL</th>
                   <th style={s.th}>Open PnL</th>
-                  <th style={s.th}>Ratio</th>
                   <th style={s.th}>Actions</th>
                 </tr>
               </thead>
@@ -213,7 +270,7 @@ export default function Dashboard({ token }: { token: string }) {
                       {a.is_leader ? (
                         <span style={{color:"#f59e0b",fontSize:"11px",fontWeight:500}}>Leader</span>
                       ) : (
-                        <div onClick={() => toggle(a.id)} style={{width:"32px",height:"16px",borderRadius:"8px",background:a.is_active?"#0ea5e9":"#d1d5db",cursor:"pointer",position:"relative",flexShrink:0}}>
+                        <div onClick={() => toggle(a.id)} style={{width:"32px",height:"16px",borderRadius:"8px",background:a.is_active?"#0ea5e9":"#d1d5db",cursor:"pointer",position:"relative"}}>
                           <div style={{position:"absolute",top:"2px",width:"12px",height:"12px",borderRadius:"50%",background:"white",transition:"transform 0.2s",transform:a.is_active?"translateX(18px)":"translateX(2px)"}}></div>
                         </div>
                       )}
@@ -224,10 +281,10 @@ export default function Dashboard({ token }: { token: string }) {
                     <td style={s.td}>${a.balance.toFixed(2)}</td>
                     <td style={{...s.td,color:a.day_pnl>=0?"#16a34a":"#ef4444"}}>{a.day_pnl>=0?"+":""} ${a.day_pnl.toFixed(2)}</td>
                     <td style={{...s.td,color:a.open_pnl>=0?"#16a34a":"#ef4444"}}>{a.open_pnl>=0?"+":""} ${a.open_pnl.toFixed(2)}</td>
-                    <td style={s.td}>{a.ratio}x</td>
                     <td style={{...s.td,display:"flex",gap:"4px"}}>
                       <button onClick={() => setLeader(a.id)} style={{...s.btnSmall,color:"#d97706",borderColor:"#fde68a"}}>Leader</button>
                       <button style={{...s.btnSmall,color:"#dc2626",borderColor:"#fecaca"}}>Flatten</button>
+                      <button onClick={() => deleteAccount(a.id)} style={{...s.btnSmall,color:"#9ca3af"}}>x</button>
                     </td>
                   </tr>
                 ))}

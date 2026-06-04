@@ -23,7 +23,7 @@ class TokenResponse(BaseModel):
 async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where((User.email == body.email) | (User.username == body.username)))
     if result.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Email oder Username bereits vergeben")
+        raise HTTPException(status_code=400, detail="Username bereits vergeben")
     user = User(email=body.email, username=body.username, password=hash_password(body.password))
     db.add(user)
     await db.commit()
@@ -31,9 +31,9 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 async def login(form: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.email == form.username))
+    result = await db.execute(select(User).where(User.username == form.username))
     user = result.scalar_one_or_none()
     if not user or not verify_password(form.password, user.password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email oder Passwort falsch")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Benutzername oder Passwort falsch")
     token = create_access_token({"sub": str(user.id)})
     return TokenResponse(access_token=token, username=user.username)

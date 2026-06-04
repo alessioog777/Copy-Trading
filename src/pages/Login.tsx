@@ -3,7 +3,7 @@ import { useState } from "react";
 const API = "http://localhost:8000";
 
 export default function Login({ onLogin }: { onLogin: (token: string) => void }) {
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -15,11 +15,10 @@ export default function Login({ onLogin }: { onLogin: (token: string) => void })
       const res = await fetch(`${API}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: `username=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`,
+        body: `username=${encodeURIComponent(username)}&password=${encodeURIComponent(password)}`,
       });
-      if (!res.ok) { setError("Email oder Passwort falsch"); return; }
+      if (!res.ok) { setError("Benutzername oder Passwort falsch"); return; }
       const data = await res.json();
-      localStorage.setItem("token", data.access_token);
       onLogin(data.access_token);
     } catch {
       setError("Server nicht erreichbar");
@@ -40,15 +39,15 @@ export default function Login({ onLogin }: { onLogin: (token: string) => void })
           <p style={{fontSize:"12px",color:"#9ca3af",marginBottom:"24px"}}>Sign in to your account</p>
           <div style={{display:"flex",flexDirection:"column",gap:"16px"}}>
             <div>
-              <label style={{fontSize:"12px",color:"#6b7280",display:"block",marginBottom:"6px"}}>Email</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                placeholder="you@example.com"
+              <label style={{fontSize:"12px",color:"#6b7280",display:"block",marginBottom:"6px"}}>Username</label>
+              <input type="text" value={username} onChange={e => setUsername(e.target.value)}
+                placeholder=""
                 style={{width:"100%",padding:"8px 12px",fontSize:"14px",borderRadius:"8px",border:"1px solid #e5e7eb",outline:"none",boxSizing:"border-box"}} />
             </div>
             <div>
               <label style={{fontSize:"12px",color:"#6b7280",display:"block",marginBottom:"6px"}}>Password</label>
               <input type="password" value={password} onChange={e => setPassword(e.target.value)}
-                placeholder="••••••••"
+                placeholder=""
                 onKeyDown={e => e.key === "Enter" && handleLogin()}
                 style={{width:"100%",padding:"8px 12px",fontSize:"14px",borderRadius:"8px",border:"1px solid #e5e7eb",outline:"none",boxSizing:"border-box"}} />
             </div>
@@ -57,10 +56,6 @@ export default function Login({ onLogin }: { onLogin: (token: string) => void })
               style={{width:"100%",padding:"8px",borderRadius:"8px",background:"#0ea5e9",color:"white",fontSize:"14px",fontWeight:500,border:"none",cursor:"pointer",opacity:loading?0.6:1}}>
               {loading ? "Signing in..." : "Sign in"}
             </button>
-          </div>
-          <div style={{marginTop:"16px",textAlign:"center"}}>
-            <span style={{fontSize:"12px",color:"#9ca3af"}}>No account yet? </span>
-            <span style={{fontSize:"12px",color:"#0ea5e9",cursor:"pointer"}}>Sign up</span>
           </div>
         </div>
       </div>
