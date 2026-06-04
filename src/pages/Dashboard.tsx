@@ -40,9 +40,11 @@ const s = {
   topbar: {display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 20px",height:"48px",borderBottom:"1px solid #f3f4f6",flexShrink:0},
   pill: {display:"flex",alignItems:"center",gap:"6px",padding:"4px 10px",borderRadius:"20px",border:"1px solid #e5e7eb",fontSize:"12px",color:"#6b7280"},
   dot: {width:"6px",height:"6px",borderRadius:"50%",background:"#22c55e"},
+  dotRed: {width:"6px",height:"6px",borderRadius:"50%",background:"#ef4444"},
   btnGray: {padding:"4px 10px",borderRadius:"6px",border:"1px solid #e5e7eb",fontSize:"12px",color:"#6b7280",cursor:"pointer",background:"transparent"},
   btnRed: {padding:"4px 10px",borderRadius:"6px",border:"1px solid #fecaca",fontSize:"12px",color:"#dc2626",cursor:"pointer",background:"#fef2f2"},
   btnBlue: {padding:"4px 10px",borderRadius:"6px",border:"1px solid #0ea5e9",fontSize:"12px",color:"white",cursor:"pointer",background:"#0ea5e9"},
+  btnAmber: {padding:"4px 10px",borderRadius:"6px",border:"1px solid #fde68a",fontSize:"12px",color:"#d97706",cursor:"pointer",background:"#fffbeb"},
   stats: {display:"grid",gridTemplateColumns:"1fr 1fr 1fr",borderBottom:"1px solid #f3f4f6",flexShrink:0},
   stat: {padding:"10px 20px",borderRight:"1px solid #f3f4f6"},
   statLabel: {fontSize:"11px",color:"#9ca3af",marginBottom:"3px"},
@@ -57,6 +59,7 @@ const s = {
   input: {width:"100%",padding:"8px 12px",fontSize:"13px",borderRadius:"8px",border:"1px solid #e5e7eb",outline:"none",boxSizing:"border-box" as const,marginTop:"4px"},
   label: {fontSize:"12px",color:"#6b7280",display:"block",marginBottom:"2px"},
   sectionTitle: {fontSize:"12px",fontWeight:500,color:"#6b7280",padding:"8px 12px",background:"#f9fafb",borderBottom:"1px solid #f3f4f6"},
+  leaderModal: {background:"white",borderRadius:"12px",padding:"28px",width:"360px",boxShadow:"0 20px 40px rgba(0,0,0,0.15)"},
 };
 
 const NAV = [{icon:"home",label:"Home"},{icon:"plug",label:"Connections"},{icon:"calendar",label:"Calendar"}];
@@ -91,6 +94,8 @@ export default function Dashboard({ token, userId }: { token: string; userId: nu
   const [positions, setPositions] = useState<Position[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [showLeaderModal, setShowLeaderModal] = useState(false);
+  const [allDisabled, setAllDisabled] = useState(false);
   const [form, setForm] = useState({label:"",broker:"tradelocker",account_id:"PINEX",api_key:"",api_secret:""});
   const [saving, setSaving] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
@@ -134,26 +139,26 @@ export default function Dashboard({ token, userId }: { token: string; userId: nu
 
   const setLeader = async (id: number) => {
     await fetch(`${API}/api/accounts/${id}/set-leader`, { method: "PATCH", headers });
+    setShowLeaderModal(false);
     fetchAccounts();
   };
 
   const deleteAccount = async (id: number) => {
+    if (!window.confirm("Account wirklich loeschen?")) return;
     await fetch(`${API}/api/accounts/${id}`, { method: "DELETE", headers });
-    fetchAccounts();
-  };
-
-  const flattenAccount = async (accountId: number) => {
-    const acc = accounts.find(a => a.id === accountId);
-    if (!acc) return;
-    if (!window.confirm(`Alle Positionen von "${acc.label}" schliessen?`)) return;
-    
-    await fetch(`${API}/api/copy/flatten-all`, { method: "POST", headers });
     fetchAccounts();
   };
 
   const flattenAll = async () => {
     if (!window.confirm("Alle Positionen aller Accounts schliessen?")) return;
     await fetch(`${API}/api/copy/flatten-all`, { method: "POST", headers });
+  };
+
+  const toggleAllFollowers = async () => {
+    const endpoint = allDisabled ? "enable-all-followers" : "disable-all-followers";
+    await fetch(`${API}/api/copy/${endpoint}`, { method: "POST", headers });
+    setAllDisabled(!allDisabled);
+    fetchAccounts();
   };
 
   const addAccount = async () => {
@@ -173,11 +178,13 @@ export default function Dashboard({ token, userId }: { token: string; userId: nu
   const totalBalance = accounts.reduce((s, a) => s + a.balance, 0);
   const totalDayPnl = accounts.reduce((s, a) => s + a.day_pnl, 0);
   const totalOpenPnl = positions.reduce((s, p) => s + p.open_pnl, 0);
-
   const getAccountLabel = (id: number) => accounts.find(a => a.id === id)?.label || `#${id}`;
+  const followers = accounts.filter(a => !a.is_leader);
 
   return (
     <div style={s.app}>
+
+      {/* Account Modal */}
       {showModal && (
         <div style={s.modal}>
           <div style={s.modalBox}>
@@ -186,7 +193,7 @@ export default function Dashboard({ token, userId }: { token: string; userId: nu
               <div onClick={() => setShowModal(false)} style={{cursor:"pointer",color:"#9ca3af"}}><Icon name="x"/></div>
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
-              <div><label style={s.label}>Label</label><input style={s.input} value={form.label} onChange={e => setForm({...form,label:e.target.value})} placeholder="" /></div>
+              <div><label style={s.label}>Label</label><input style={s.input} value={form.label} onChange={e => setForm({...form,label:e.target.value})} /></div>
               <div><label style={s.label}>Plattform</label>
                 <select style={s.input} value={form.broker} onChange={e => setForm({...form,broker:e.target.value})}>
                   <option value="tradelocker">TradeLocker</option>
@@ -195,12 +202,34 @@ export default function Dashboard({ token, userId }: { token: string; userId: nu
                   <option value="mt5">MT5</option>
                 </select>
               </div>
-              <div><label style={s.label}>Server</label><input style={s.input} value={form.account_id} onChange={e => setForm({...form,account_id:e.target.value})} placeholder="" /></div>
-              <div><label style={s.label}>Email</label><input type="email" style={s.input} value={form.api_key} onChange={e => setForm({...form,api_key:e.target.value})} placeholder="" /></div>
-              <div><label style={s.label}>Passwort</label><input type="password" style={s.input} value={form.api_secret} onChange={e => setForm({...form,api_secret:e.target.value})} placeholder="" /></div>
+              <div><label style={s.label}>Server</label><input style={s.input} value={form.account_id} onChange={e => setForm({...form,account_id:e.target.value})} /></div>
+              <div><label style={s.label}>Email</label><input type="email" style={s.input} value={form.api_key} onChange={e => setForm({...form,api_key:e.target.value})} /></div>
+              <div><label style={s.label}>Passwort</label><input type="password" style={s.input} value={form.api_secret} onChange={e => setForm({...form,api_secret:e.target.value})} /></div>
               <button onClick={addAccount} disabled={saving} style={{...s.btnBlue,padding:"8px",borderRadius:"8px",fontSize:"13px",fontWeight:500,marginTop:"4px",opacity:saving?0.6:1}}>
                 {saving ? "Speichern..." : "Account hinzufuegen"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Change Leader Modal */}
+      {showLeaderModal && (
+        <div style={s.modal}>
+          <div style={s.leaderModal}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"20px"}}>
+              <span style={{fontSize:"15px",fontWeight:500,color:"#1f2937"}}>Leader waehlen</span>
+              <div onClick={() => setShowLeaderModal(false)} style={{cursor:"pointer",color:"#9ca3af"}}><Icon name="x"/></div>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:"8px"}}>
+              {accounts.map(a => (
+                <div key={a.id} onClick={() => setLeader(a.id)}
+                  style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderRadius:"8px",border:`1px solid ${a.is_leader?"#0ea5e9":"#e5e7eb"}`,cursor:"pointer",background:a.is_leader?"#f0f9ff":"white"}}>
+                  <span style={{color:"#1f2937"}}>{a.label}</span>
+                  <span style={s.badge}>{a.broker}</span>
+                  {a.is_leader && <span style={{color:"#0ea5e9",fontSize:"11px",fontWeight:500}}>Aktuell</span>}
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -232,8 +261,10 @@ export default function Dashboard({ token, userId }: { token: string; userId: nu
           </div>
           <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
             <button onClick={() => setShowModal(true)} style={s.btnBlue}><Icon name="plus"/> Account</button>
-            <button style={s.btnGray}>Change leader</button>
-            <button style={s.btnGray}>Disable all</button>
+            <button onClick={() => setShowLeaderModal(true)} style={s.btnAmber}>Change leader</button>
+            <button onClick={toggleAllFollowers} style={allDisabled ? s.btnBlue : s.btnGray}>
+              {allDisabled ? "Enable all" : "Disable all"}
+            </button>
             <button onClick={flattenAll} style={s.btnRed}>Flatten all</button>
           </div>
         </div>
@@ -252,7 +283,10 @@ export default function Dashboard({ token, userId }: { token: string; userId: nu
               <div style={s.statLabel}>Total balance</div>
               <div style={s.statVal}>${totalBalance.toFixed(2)}</div>
             </div>
-            <div style={s.pill}><span style={s.dot}></span>Accounts: {accounts.length}</div>
+            <div style={s.pill}>
+              <span style={followers.some(f => f.is_active) ? s.dot : s.dotRed}></span>
+              {followers.filter(f => f.is_active).length}/{followers.length} Follower aktiv
+            </div>
           </div>
         </div>
 
@@ -261,7 +295,6 @@ export default function Dashboard({ token, userId }: { token: string; userId: nu
             <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"128px",color:"#9ca3af"}}>Laden...</div>
           ) : (
             <>
-              {/* Accounts Tabelle */}
               <div style={s.sectionTitle}>Accounts</div>
               {accounts.length === 0 ? (
                 <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",height:"100px",color:"#9ca3af",gap:"12px"}}>
@@ -308,7 +341,6 @@ export default function Dashboard({ token, userId }: { token: string; userId: nu
                         <td style={{...s.td,color:a.day_pnl>=0?"#16a34a":"#ef4444"}}>{a.day_pnl>=0?"+":""} ${a.day_pnl.toFixed(2)}</td>
                         <td style={{...s.td,display:"flex",gap:"4px"}}>
                           <button onClick={() => setLeader(a.id)} style={{...s.btnSmall,color:"#d97706",borderColor:"#fde68a"}}>Leader</button>
-                          <button onClick={() => flattenAccount(a.id)} style={{...s.btnSmall,color:"#dc2626",borderColor:"#fecaca"}}>Flatten</button>
                           <button onClick={() => deleteAccount(a.id)} style={{...s.btnSmall,color:"#9ca3af"}}>x</button>
                         </td>
                       </tr>
@@ -317,10 +349,9 @@ export default function Dashboard({ token, userId }: { token: string; userId: nu
                 </table>
               )}
 
-              {/* Positionen Tabelle */}
               {positions.length > 0 && (
                 <>
-                  <div style={{...s.sectionTitle,marginTop:"0px"}}>Offene Positionen</div>
+                  <div style={s.sectionTitle}>Offene Positionen</div>
                   <table style={s.table}>
                     <thead>
                       <tr>
